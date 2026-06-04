@@ -518,6 +518,33 @@ def _validate_generation_settings(text: str, temperature: float, topk: int, max_
         raise HTTPException(status_code=400, detail="Max audio length must be between 1,000 and 90,000 ms.")
 
 
+def _text_without_speaker_labels(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        cleaned = re.sub(r"^\s*(?:\[\d+\]|speaker\s+\d+\s*:)\s*", "", line, flags=re.IGNORECASE).strip()
+        if cleaned:
+            lines.append(cleaned)
+    return " ".join(lines)
+
+
+def _estimate_audio_length_ms(text: str) -> int:
+    word_count = len(re.findall(r"\S+", _text_without_speaker_labels(text)))
+    if word_count <= 8:
+        return 1_000
+    seconds = int((word_count / 2.35) + 2)
+    return min(90_000, max(1_000, seconds * 1_000))
+
+
+def _log_if_likely_truncated(text: str, max_audio_length_ms: int) -> None:
+    estimated_ms = _estimate_audio_length_ms(text)
+    if max_audio_length_ms < estimated_ms:
+        logger.warning(
+            "Render max_audio_length_ms=%s may truncate this text; estimated speech budget is about %s ms",
+            max_audio_length_ms,
+            estimated_ms,
+        )
+
+
 def _decode_prompt_audio(audio_bytes: bytes, sample_rate: int) -> torch.Tensor:
     waveform, source_rate = torchaudio.load(io.BytesIO(audio_bytes))
     if waveform.ndim != 2 or waveform.size(0) == 0:
@@ -737,6 +764,7 @@ async def render(
     prompt_audio: Optional[UploadFile] = File(None),
 ) -> RenderSummary:
     _validate_generation_settings(text, temperature, topk, max_audio_length_ms)
+    _log_if_likely_truncated(text, max_audio_length_ms)
     try:
         generator = await manager.ensure_ready(WarmRequest(device=device, dtype=dtype))
     except ValueError as exc:

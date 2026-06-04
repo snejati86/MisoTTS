@@ -5,6 +5,7 @@ const state = {
   promptFile: null,
   pollTimer: null,
   isRendering: false,
+  maxLengthTouched: false,
   logSource: null,
   logs: [],
   logIds: new Set(),
@@ -143,6 +144,30 @@ function renderMeta(render) {
     mode,
     `${render.utterances.length} line${render.utterances.length === 1 ? "" : "s"}`,
   ];
+}
+
+function scriptTextOnly(value) {
+  return String(value || "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:\[\d+\]|speaker\s+\d+\s*:)\s*/i, "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function estimateMaxAudioLengthMs(value) {
+  const words = scriptTextOnly(value).split(/\s+/).filter(Boolean).length;
+  if (words <= 8) return 1000;
+  const seconds = Math.ceil(words / 2.35 + 1.5);
+  return Math.min(90000, Math.max(1000, seconds * 1000));
+}
+
+function syncMaxLengthToText() {
+  if (state.maxLengthTouched) return;
+  const estimated = estimateMaxAudioLengthMs(els.textInput.value);
+  const current = Number.parseInt(els.maxLengthInput.value || "1000", 10);
+  if (estimated > current) {
+    els.maxLengthInput.value = String(estimated);
+  }
 }
 
 function formatLogTime(value) {
@@ -412,6 +437,7 @@ function updatePromptFile(file) {
 }
 
 function buildRenderFormData() {
+  syncMaxLengthToText();
   const formData = new FormData();
   formData.set("text", els.textInput.value);
   formData.set("speaker", els.speakerInput.value || "0");
@@ -525,7 +551,13 @@ function bindEvents() {
   els.renderForm.addEventListener("submit", submitRender);
   els.clearButton.addEventListener("click", () => {
     els.textInput.value = "";
+    state.maxLengthTouched = false;
+    els.maxLengthInput.value = "1000";
     els.textInput.focus();
+  });
+  els.textInput.addEventListener("input", syncMaxLengthToText);
+  els.maxLengthInput.addEventListener("input", () => {
+    state.maxLengthTouched = true;
   });
   els.temperatureInput.addEventListener("input", () => {
     els.temperatureValue.value = els.temperatureInput.value;
