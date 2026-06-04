@@ -1,0 +1,20 @@
+services:
+  studio:
+    build:
+      context: .
+    ports:
+      - "${PORT:-7860}:7860"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      MISO_TTS_8B_MODEL: ${MISO_TTS_8B_MODEL:-MisoLabs/MisoTTS}
+      MISO_TTS_AUTOLOAD: ${MISO_TTS_AUTOLOAD:-0}
+      MISO_TTS_DEVICE: ${MISO_TTS_DEVICE:-auto}
+      MISO_TTS_DTYPE: ${MISO_TTS_DTYPE:-auto}
+      MISO_TTS_STUDIO_OUTPUT_DIR: /app/outputs/studio
+    volumes:
+      - studio-outputs:/app/outputs
+      - hf-cache:/app/.cache/huggingface
+
+volumes:
+  hf-cache:
+  studio-outputs:

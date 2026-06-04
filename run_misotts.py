@@ -5,7 +5,7 @@ os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
 
 import torch
 import torchaudio  # type: ignore
-from generator import DEFAULT_MISO_TTS_REPO_ID, Segment, load_miso_8b
+from generator import DEFAULT_MISO_TTS_REPO_ID, Segment, TokenizerAccessError, load_miso_8b
 
 # Disable Triton compilation
 os.environ["NO_TORCH_COMPILE"] = "1"
@@ -29,7 +29,12 @@ def main():
         )
         print("The model will be downloaded and cached automatically if it is not already present.")
 
-    generator = load_miso_8b(device, model_path_or_repo_id=model_source)
+    try:
+        generator = load_miso_8b(device, model_path_or_repo_id=model_source)
+    except TokenizerAccessError as exc:
+        print()
+        print(exc)
+        raise SystemExit(1) from None
 
     conversation = [
         {"text": "I'm just honestly not that into him, you know?", "speaker_id": 0},

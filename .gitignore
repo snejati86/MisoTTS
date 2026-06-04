@@ -36,6 +36,7 @@ ENV/
 # Project specific
 *.wav
 output_*/
+outputs/
 basic_audio.wav
 full_conversation.wav
 context_audio.wav

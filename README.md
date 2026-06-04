@@ -48,13 +48,107 @@ source .venv/bin/activate
 Then run the example conversation. By default, `run_misotts.py` loads the public
 model from [MisoLabs/MisoTTS](https://huggingface.co/MisoLabs/MisoTTS) and
 downloads it into the Hugging Face cache if it is not already present on your
-machine:
+machine. The model also uses the Llama 3.2 tokenizer from
+[`meta-llama/Llama-3.2-1B`](https://huggingface.co/meta-llama/Llama-3.2-1B),
+which is gated by Meta on Hugging Face. Before running locally, request/accept
+access to that repository and log in:
+
+```bash
+uv run huggingface-cli login
+```
+
+Then run:
 
 ```bash
 uv run python run_misotts.py
 ```
 
 The script writes `full_conversation.wav` in the repository root.
+If you already have an authorized local tokenizer path or repo, set
+`MISO_TTS_TOKENIZER_MODEL` to that path or repo id.
+
+### Studio app: frontend and backend
+
+The repository also includes MisoTTS Studio, a local FastAPI backend plus a
+static frontend served from the same app. It keeps one warm model instance in
+memory, exposes model status and live logs, generates playable WAV renders, and
+supports voice cloning by passing prompt audio plus its transcript.
+
+One-command local start:
+
+```bash
+uv run python scripts/start_studio.py
+```
+
+Open `http://127.0.0.1:7860` to use the Studio UI. On Apple Silicon, the native
+launcher defaults to PyTorch Metal/MPS with `float16` when MPS is available.
+
+If you want to run Uvicorn directly:
+
+```bash
+uv run uvicorn studio_server:app --host 127.0.0.1 --port 7860
+```
+
+The API is also available:
+
+- `GET /api/status` - model load state and render count.
+- `GET /api/logs` - recent Studio log entries.
+- `GET /api/logs/stream` - live log stream using Server-Sent Events.
+- `POST /api/warm` - starts or restarts model warm-loading.
+- `POST /api/render` - multipart form with `text`, generation settings, and
+  optional `prompt_audio` plus `prompt_transcript` for cloning.
+- `GET /api/renders/{render_id}/audio` - playable WAV.
+- `GET /api/renders/{render_id}/download` - downloadable WAV.
+
+Set `MISO_TTS_AUTOLOAD=0` if you want the server to start without warming the
+model until `/api/warm` or `/api/render` is called.
+
+#### Docker
+
+The Docker image runs the same frontend and backend together at
+`http://127.0.0.1:7860` on macOS, Windows, and Linux:
+
+```bash
+docker compose up --build
+```
+
+Or without Compose:
+
+```bash
+docker build -t misotts-studio .
+docker run --rm -p 7860:7860 \
+  -e HF_TOKEN="$HF_TOKEN" \
+  -v misotts-hf-cache:/app/.cache/huggingface \
+  -v misotts-outputs:/app/outputs \
+  misotts-studio
+```
+
+The default Docker image is portable CPU Linux. Docker Desktop on macOS does not
+expose Apple Metal/MPS into Linux containers, so use the native `uv run python
+scripts/start_studio.py` path when you want Metal on Apple Silicon. On Linux,
+you can set `MISO_TTS_DEVICE=cuda` and use an appropriate CUDA-enabled PyTorch
+base image if you adapt the Dockerfile for NVIDIA GPUs.
+
+The model needs access to the gated Llama tokenizer. For Docker, either pass
+`HF_TOKEN` or mount a Hugging Face cache that already contains an authorized
+tokenizer download.
+
+#### Apple Silicon / Metal
+
+On Apple Silicon, the native Studio defaults to PyTorch's Metal Performance
+Shaders backend with `device="mps"` and `dtype="float16"`. In the UI, leave
+`Metal GPU` and `Float16` selected, then click **Warm Model** or **Generate**.
+From the API:
+
+```bash
+curl -X POST http://127.0.0.1:7860/api/warm \
+  -H "Content-Type: application/json" \
+  -d '{"device":"mps","dtype":"float16","force":true}'
+```
+
+This is an experimental PyTorch MPS path, not an MLX port. A native MLX version
+would require reimplementing the model, Mimi audio tokenizer integration, and
+watermarking path in MLX and converting weights.
 
 With `pip` instead of `uv`:
 

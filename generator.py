@@ -8,6 +8,7 @@ os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
 import torch
 import torchaudio
 from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import GatedRepoError
 from models import MISO_TTS_8B_CONFIG, Model, ModelArgs
 from moshi_compat import patch_bitsandbytes_import_for_unquantized_layers
 from moshi.models import loaders
@@ -16,7 +17,12 @@ from transformers import AutoTokenizer
 from watermarking import MISO_TTS_WATERMARK, load_watermarker, watermark
 
 DEFAULT_MISO_TTS_REPO_ID = "MisoLabs/MisoTTS"
+DEFAULT_LLAMA3_TOKENIZER_REPO_ID = "meta-llama/Llama-3.2-1B"
 patch_bitsandbytes_import_for_unquantized_layers()
+
+
+class TokenizerAccessError(RuntimeError):
+    pass
 
 
 @dataclass
@@ -27,12 +33,36 @@ class Segment:
     audio: torch.Tensor
 
 
+def _looks_like_hf_access_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "gated repo" in message or "restricted" in message or "401 client error" in message
+
+
+def _tokenizer_access_error_message(tokenizer_name: str) -> str:
+    return (
+        f"Could not load the Llama 3 tokenizer from '{tokenizer_name}'. "
+        "MisoTTS uses the Llama 3.2 tokenizer, and the default "
+        "'meta-llama/Llama-3.2-1B' repository is gated on Hugging Face.\n\n"
+        "Fix:\n"
+        "  1. Open https://huggingface.co/meta-llama/Llama-3.2-1B and request/accept access.\n"
+        "  2. Log in locally with: uv run huggingface-cli login\n"
+        "  3. Re-run: uv run python run_misotts.py\n\n"
+        "If you already have an authorized local tokenizer path or repo, set "
+        "MISO_TTS_TOKENIZER_MODEL to that path or repo id."
+    )
+
+
 def load_llama3_tokenizer():
     """
     https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
     """
-    tokenizer_name = "meta-llama/Llama-3.2-1B"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    tokenizer_name = os.environ.get("MISO_TTS_TOKENIZER_MODEL", DEFAULT_LLAMA3_TOKENIZER_REPO_ID)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    except (GatedRepoError, OSError) as exc:
+        if isinstance(exc, GatedRepoError) or _looks_like_hf_access_error(exc):
+            raise TokenizerAccessError(_tokenizer_access_error_message(tokenizer_name)) from None
+        raise
     bos = tokenizer.bos_token
     eos = tokenizer.eos_token
     tokenizer._tokenizer.post_processor = TemplateProcessing(
@@ -48,11 +78,12 @@ class Generator:
     def __init__(
         self,
         model: Model,
+        text_tokenizer=None,
     ):
         self._model = model
         self._model.setup_caches(1)
 
-        self._text_tokenizer = load_llama3_tokenizer()
+        self._text_tokenizer = text_tokenizer or load_llama3_tokenizer()
         self._frame_size = self._model.config.audio_num_codebooks + 1
 
         device = next(model.parameters()).device
@@ -234,5 +265,6 @@ def load_miso_8b(
     dtype: torch.dtype = torch.bfloat16,
 ) -> Generator:
     source = model_path_or_repo_id or os.environ.get("MISO_TTS_8B_MODEL", DEFAULT_MISO_TTS_REPO_ID)
+    text_tokenizer = load_llama3_tokenizer()
     model = _load_model(source, MISO_TTS_8B_CONFIG, device=device, dtype=dtype)
-    return Generator(model)
+    return Generator(model, text_tokenizer=text_tokenizer)

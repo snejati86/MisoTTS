@@ -20,7 +20,10 @@ dependencies = [
     "torchtune==0.4.0",
     "torchao==0.9.0",
     "silentcipher @ git+https://github.com/SesameAILabs/silentcipher@d46d7d0893a583d8968ab3a6626e2289faec9152",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.setuptools]
-py-modules = ["generator", "models", "moshi_compat", "run_misotts", "watermarking"]
+py-modules = ["generator", "models", "moshi_compat", "run_misotts", "studio_server", "watermarking"]

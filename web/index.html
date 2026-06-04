@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MisoTTS Studio</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="/assets/app.js" defer></script>
+  </head>
+  <body>
+    <div class="studio-shell">
+      <aside class="rail" aria-label="Studio navigation">
+        <div class="brand">
+          <span class="brand-mark">M</span>
+          <div>
+            <strong>MisoTTS</strong>
+            <span>Studio</span>
+          </div>
+        </div>
+
+        <nav class="rail-nav" aria-label="Sections">
+          <button class="rail-button active" type="button" title="Console">
+            <i data-lucide="audio-lines"></i>
+            <span>Console</span>
+          </button>
+          <button class="rail-button" type="button" title="Renders">
+            <i data-lucide="list-music"></i>
+            <span>Renders</span>
+          </button>
+          <button class="rail-button" type="button" title="Logs">
+            <i data-lucide="terminal"></i>
+            <span>Logs</span>
+          </button>
+          <button class="rail-button" type="button" title="Voices">
+            <i data-lucide="mic-2"></i>
+            <span>Voices</span>
+          </button>
+        </nav>
+
+        <section class="rail-status" aria-label="Model status">
+          <div class="status-line">
+            <span id="statusDot" class="status-dot idle"></span>
+            <span id="statusLabel">Idle</span>
+          </div>
+          <dl>
+            <div>
+              <dt>Device</dt>
+              <dd id="deviceValue">Auto</dd>
+            </div>
+            <div>
+              <dt>Renders</dt>
+              <dd id="renderCount">0</dd>
+            </div>
+          </dl>
+          <button id="warmButton" class="button primary full" type="button">
+            <i data-lucide="flame-kindling"></i>
+            <span>Warm Model</span>
+          </button>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Console Studio</p>
+            <h1>Render dialogue with a warm local MisoTTS model.</h1>
+          </div>
+          <div class="top-actions">
+            <button id="refreshButton" class="button quiet" type="button" title="Refresh status">
+              <i data-lucide="refresh-cw"></i>
+              <span>Refresh</span>
+            </button>
+            <a id="docsLink" class="button quiet" href="/docs" target="_blank" rel="noreferrer">
+              <i data-lucide="braces"></i>
+              <span>API</span>
+            </a>
+          </div>
+        </header>
+
+        <section class="console-grid" aria-label="MisoTTS render console">
+          <section class="editor-panel" aria-labelledby="editorTitle">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Script</p>
+                <h2 id="editorTitle">Dialogue editor</h2>
+              </div>
+              <div class="mode-tabs" role="group" aria-label="Script mode">
+                <button class="tab active" type="button">Dialogue</button>
+                <button class="tab" type="button">Single</button>
+              </div>
+            </div>
+
+            <form id="renderForm" class="render-form">
+              <label class="field stack">
+                <span>Text</span>
+                <textarea id="textInput" name="text" spellcheck="true">[0] Quick MisoTTS smoke test.</textarea>
+              </label>
+
+              <div class="control-strip">
+                <label class="field">
+                  <span>Speaker</span>
+                  <input id="speakerInput" name="speaker" type="number" min="0" max="99" value="0" />
+                </label>
+                <label class="field">
+                  <span>Max ms</span>
+                  <input id="maxLengthInput" name="max_audio_length_ms" type="number" min="1000" max="90000" step="500" value="1000" />
+                </label>
+                <label class="field">
+                  <span>Top-k</span>
+                  <input id="topkInput" name="topk" type="number" min="1" max="512" value="20" />
+                </label>
+                <label class="field range-field">
+                  <span>Temp <output id="temperatureValue">0.9</output></span>
+                  <input id="temperatureInput" name="temperature" type="range" min="0.1" max="2" step="0.05" value="0.9" />
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button id="renderButton" class="button primary" type="submit">
+                  <i data-lucide="sparkles"></i>
+                  <span>Generate</span>
+                </button>
+                <button id="clearButton" class="button quiet" type="button">
+                  <i data-lucide="eraser"></i>
+                  <span>Clear</span>
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <aside class="inspector-panel" aria-label="Voice and model controls">
+            <section class="panel-section">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">Voice</p>
+                  <h2>Clone source</h2>
+                </div>
+                <label class="toggle">
+                  <input id="cloneToggle" type="checkbox" />
+                  <span></span>
+                </label>
+              </div>
+
+              <label class="drop-zone" for="promptAudioInput" id="dropZone" tabindex="0">
+                <input id="promptAudioInput" type="file" accept="audio/*" />
+                <i data-lucide="upload-cloud"></i>
+                <strong id="fileName">Drop prompt audio</strong>
+                <span id="fileMeta">WAV, MP3, M4A</span>
+              </label>
+
+              <label class="field stack">
+                <span>Prompt transcript</span>
+                <textarea id="promptTranscriptInput" rows="4" placeholder="Transcript for the prompt audio"></textarea>
+              </label>
+
+              <label class="field">
+                <span>Prompt speaker</span>
+                <input id="promptSpeakerInput" type="number" min="0" max="99" value="0" />
+              </label>
+            </section>
+
+            <section class="panel-section">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">Model</p>
+                  <h2>Warm state</h2>
+                </div>
+              </div>
+              <div class="meter-list">
+                <div>
+                  <span>State</span>
+                  <strong id="modelState">Idle</strong>
+                </div>
+                <div>
+                  <span>Precision</span>
+                  <strong id="dtypeValue">Auto</strong>
+                </div>
+                <div>
+                  <span>Load</span>
+                  <strong id="loadValue">--</strong>
+                </div>
+              </div>
+              <div class="model-controls">
+                <label class="field">
+                  <span>Device</span>
+                  <select id="deviceSelect">
+                    <option value="auto">Auto</option>
+                    <option value="cpu">CPU</option>
+                    <option value="mps">Metal GPU</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Precision</span>
+                  <select id="dtypeSelect">
+                    <option value="auto">Auto</option>
+                    <option value="float32">Float32</option>
+                    <option value="float16">Float16</option>
+                    <option value="bfloat16">BFloat16</option>
+                  </select>
+                </label>
+              </div>
+              <p id="statusMessage" class="status-message" role="status"></p>
+            </section>
+          </aside>
+        </section>
+
+        <section class="transport-panel" aria-label="Playback and render history">
+          <div class="transport-main">
+            <canvas id="waveformCanvas" width="960" height="150" aria-label="Audio waveform"></canvas>
+            <div class="player-row">
+              <audio id="audioPlayer" controls preload="metadata"></audio>
+              <a id="downloadLink" class="button download disabled" href="#" download>
+                <i data-lucide="download"></i>
+                <span>Download WAV</span>
+              </a>
+            </div>
+            <div class="render-meta" id="renderMeta">
+              <span>No render selected</span>
+            </div>
+          </div>
+
+          <aside class="history-panel" aria-labelledby="historyTitle" tabindex="-1">
+            <div class="panel-head compact">
+              <div>
+                <p class="eyebrow">Queue</p>
+                <h2 id="historyTitle">Renders</h2>
+              </div>
+              <button id="historyRefreshButton" class="icon-button" type="button" title="Refresh renders">
+                <i data-lucide="rotate-cw"></i>
+              </button>
+            </div>
+            <div id="historyList" class="history-list"></div>
+          </aside>
+
+          <aside class="logs-panel" aria-labelledby="logsTitle" tabindex="-1">
+            <div class="panel-head compact">
+              <div>
+                <p class="eyebrow">Live</p>
+                <h2 id="logsTitle">Logs</h2>
+              </div>
+              <div class="log-actions">
+                <span class="stream-state">
+                  <span id="logStreamDot" class="stream-dot idle"></span>
+                  <span id="logStreamState">Idle</span>
+                </span>
+                <button id="logsClearButton" class="icon-button" type="button" title="Clear visible logs">
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </div>
+            </div>
+            <div id="logList" class="log-list" role="log" aria-live="polite"></div>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
