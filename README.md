@@ -15,6 +15,7 @@
 
 <p>
   <a href="#quickstart">Quickstart</a> |
+  <a href="#studio-app-frontend-and-backend">Studio</a> |
   <a href="#model-introduction">Model Introduction</a> |
   <a href="#model-summary">Model Summary</a> |
   <a href="#usage">Usage</a> |
@@ -42,22 +43,30 @@ Then clone the repository and create the environment:
 git clone https://github.com/MisoLabsAI/MisoTTS.git
 cd MisoTTS
 uv sync --python 3.10
-source .venv/bin/activate
 ```
 
-Then run the example conversation. By default, `run_misotts.py` loads the public
-model from [MisoLabs/MisoTTS](https://huggingface.co/MisoLabs/MisoTTS) and
-downloads it into the Hugging Face cache if it is not already present on your
-machine. The model also uses the Llama 3.2 tokenizer from
+MisoTTS loads the public model from
+[MisoLabs/MisoTTS](https://huggingface.co/MisoLabs/MisoTTS) and downloads it
+into the Hugging Face cache if it is not already present on your machine. The
+model also uses the Llama 3.2 tokenizer from
 [`meta-llama/Llama-3.2-1B`](https://huggingface.co/meta-llama/Llama-3.2-1B),
-which is gated by Meta on Hugging Face. Before running locally, request/accept
-access to that repository and log in:
+which is gated by Meta on Hugging Face. Before running locally, request or
+accept access to that repository and log in:
 
 ```bash
 uv run huggingface-cli login
 ```
 
-Then run:
+Start the full Studio app, including frontend and backend:
+
+```bash
+uv run python scripts/start_studio.py
+```
+
+Open `http://127.0.0.1:7860`. On Apple Silicon, the native Studio defaults to
+Metal/MPS with `float16` when it is available.
+
+To run the older script-only example instead:
 
 ```bash
 uv run python run_misotts.py
@@ -74,7 +83,9 @@ static frontend served from the same app. It keeps one warm model instance in
 memory, exposes model status and live logs, generates playable WAV renders, and
 supports voice cloning by passing prompt audio plus its transcript.
 
-One-command local start:
+<img src="images/studio_ui.png" alt="MisoTTS Studio UI" width="100%">
+
+#### Run locally
 
 ```bash
 uv run python scripts/start_studio.py
@@ -89,7 +100,46 @@ If you want to run Uvicorn directly:
 uv run uvicorn studio_server:app --host 127.0.0.1 --port 7860
 ```
 
-The API is also available:
+Useful options:
+
+```bash
+uv run python scripts/start_studio.py --port 7861
+uv run python scripts/start_studio.py --autoload
+uv run python scripts/start_studio.py --no-browser
+```
+
+Set `MISO_TTS_AUTOLOAD=0` if you want the server to start without warming the
+model until **Warm Model** or **Generate** is clicked.
+
+#### Use the Studio UI
+
+The Studio screen is organized around a few workflows:
+
+- **Warm the model** - use the Model panel to choose the device and precision,
+  then click **Warm Model**. On Apple Silicon, leave `Metal GPU` and `Float16`
+  selected. Docker defaults to portable CPU unless you adapt it for CUDA.
+- **Render text** - type a line in the dialogue editor and click **Generate**.
+  Speaker labels such as `[0] Hello` and `[1] Hi there` create multi-speaker
+  renders.
+- **Tune generation** - adjust speaker id, max milliseconds, top-k, and
+  temperature before rendering. The default text is a short smoke test so first
+  runs do not look frozen.
+- **Clone a voice** - enable the clone source toggle, drop prompt audio, and
+  provide an accurate transcript for that prompt audio.
+- **Play and download** - rendered audio appears in the transport area with a
+  waveform, an audio player, and a **Download WAV** button.
+- **Review history** - recent renders are listed in the queue; click one to
+  reload it into the player.
+- **Watch logs** - the live log panel shows warmup, render, playback, download,
+  and error events from the backend.
+
+First model warmup can take a while because the 8B checkpoint and tokenizer are
+loaded into memory. The log panel is the best place to tell the difference
+between a real error and a long model operation.
+
+#### API
+
+The same backend powers the UI and can be called directly:
 
 - `GET /api/status` - model load state and render count.
 - `GET /api/logs` - recent Studio log entries.
@@ -100,8 +150,18 @@ The API is also available:
 - `GET /api/renders/{render_id}/audio` - playable WAV.
 - `GET /api/renders/{render_id}/download` - downloadable WAV.
 
-Set `MISO_TTS_AUTOLOAD=0` if you want the server to start without warming the
-model until `/api/warm` or `/api/render` is called.
+Example render request:
+
+```bash
+curl -X POST http://127.0.0.1:7860/api/render \
+  -F 'text=[0] Quick MisoTTS smoke test.' \
+  -F 'speaker=0' \
+  -F 'max_audio_length_ms=1000' \
+  -F 'topk=20' \
+  -F 'temperature=0.9' \
+  -F 'device=auto' \
+  -F 'dtype=auto'
+```
 
 #### Docker
 
