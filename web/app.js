@@ -5,6 +5,8 @@ const state = {
   promptFile: null,
   pollTimer: null,
   isRendering: false,
+  renderStartedAt: null,
+  renderTimer: null,
   maxLengthTouched: false,
   logSource: null,
   logs: [],
@@ -37,6 +39,39 @@ function setStatusMessage(message, tone = "") {
   els.statusMessage.className = `status-message ${tone}`.trim();
 }
 
+function formatElapsed(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function renderElapsed() {
+  return state.renderStartedAt ? formatElapsed(Date.now() - state.renderStartedAt) : "00:00";
+}
+
+function updateRenderStatusMessage(status = state.status) {
+  const phase = status && status.state === "loading" ? "Warming model for render" : "Rendering audio";
+  const hasWaited = state.renderStartedAt && Date.now() - state.renderStartedAt >= 30000;
+  const note = hasWaited ? "Longer text can take a few minutes" : "Keeping the request open";
+  setStatusMessage(`${phase} · ${renderElapsed()} elapsed · ${note}`, "loading");
+}
+
+function stopRenderTimer() {
+  if (state.renderTimer) {
+    window.clearInterval(state.renderTimer);
+  }
+  state.renderTimer = null;
+  state.renderStartedAt = null;
+}
+
+function startRenderTimer() {
+  stopRenderTimer();
+  state.renderStartedAt = Date.now();
+  updateRenderStatusMessage();
+  state.renderTimer = window.setInterval(updateRenderStatusMessage, 1000);
+}
+
 function updateStatusUi(status) {
   state.status = status;
   const statusName = titleCase(status.state);
@@ -50,7 +85,7 @@ function updateStatusUi(status) {
   els.loadValue.textContent = status.load_seconds ? `${status.load_seconds}s` : "--";
 
   if (state.isRendering) {
-    setStatusMessage(status.state === "loading" ? "Warming model for render" : "Rendering audio");
+    updateRenderStatusMessage(status);
   } else if (status.state === "ready") {
     setStatusMessage("Model ready", "ready");
   } else if (status.state === "loading") {
@@ -458,8 +493,8 @@ function buildRenderFormData() {
 async function submitRender(event) {
   event.preventDefault();
   state.isRendering = true;
+  startRenderTimer();
   setBusy(els.renderButton, true, "Generating");
-  setStatusMessage("Rendering");
 
   try {
     const render = await api("/api/render", {
@@ -470,9 +505,11 @@ async function submitRender(event) {
     selectRender(render);
     await refreshStatus();
     state.isRendering = false;
+    stopRenderTimer();
     setStatusMessage("Render ready", "ready");
   } catch (error) {
     state.isRendering = false;
+    stopRenderTimer();
     setStatusMessage(error.message, "error");
   } finally {
     setBusy(els.renderButton, false, "Generate");
@@ -632,4 +669,5 @@ async function init() {
 window.addEventListener("DOMContentLoaded", init);
 window.addEventListener("beforeunload", () => {
   if (state.logSource) state.logSource.close();
+  stopRenderTimer();
 });
